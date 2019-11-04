@@ -1,0 +1,61 @@
+---
+title: "Spirit Score Analysis"
+author: "csaund"
+date: "11/2/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(pwr)
+library(ordinal)
+library(gridExtra)
+library(RColorBrewer)
+library(knitr)
+library(scales)
+library(googledrive)
+```
+
+I couldn't get loading from a google drive pack working, so I copied loads from here:
+https://docs.google.com/spreadsheets/d/e/2PACX-1vSpxvl3g-EBCqR96hJ83V5pTN68k88cKiDF9eMgVP6zjDnn_El8emYfUQ2epBq-uu8yTtW37GzIV1pG/pubhtml#. 
+If you're also an engineer, it makes your blood boil that I didn't automate this. Big shrug.
+
+Honestly, I can only describe UKU's archival data mangement and reporting as a flaming garbage heap. A totally understandable flaming garbage heap, but a complete and utter dumpster fire nonetheless. EUCF and WFDF are no better, to be clear. Overall, actually getting this data was by far the most time-consuming and least rewarding part of this process. Before embarking I had considered trying to put together a little program that would scrape and visualize scores from these three sources and make a little app where you could filter by league, age, division, etc. and it would create visualizations to compare with, but the headache of getting the data is just not worth it right now, cause I have a real job already where I code all day. But if you want this app and you want to pay me to take a sebatical from my PhD to make it, talk to me, cause that is 100% something I would be down to do.
+
+
+Consequently, the super-caveat to all of this is that this is that there's not a ton of data to work with. Our overall dataset is pretty large, but we're often aggregating indoor and outdoor, and often looking across multiple years to answer some of our questions. Worse yet, our mixed data all comes from indoor, but our Men's/Women's data is mixed across indoor and outdoor. Also, at the moment this is all about *UK, University-Level Ultimate* (for aforementioned data-collection reasons). Basically what I'm saying is, this is all very wishy-washy and about general trends, because if we actually controlled for everything we wouldn't have enough data to see interesting trends. If you provide me with spreadsheets of other regions, I will happily run some of these comparisons on them!
+
+
+
+First we load in the data that I comglomerated because R doesn't know how to read in multiple spreadsheets from google drive. 
+```{r}
+spirit_path = "spirit.csv"
+dl <- drive_download(as_id("1wmn1K04N4dRuk4HPezT0fHFl0q1pEeSUsjgm2hfpXPc"), path=spirit_path, overwrite=TRUE)
+raw <- read.csv(spirit_path)
+```
+
+Now let's just start asking questions because data science is dope AF. 
+
+1. Are spirit scores reciprocal? That is, given one team thought the spirit was one way, did the other team also think that?
+
+2. Which teams have beef with each other? 
+
+3. How do repeat games stack up against one another?
+
+4. Who comments most: Men, Women, or Mixed?
+
+3. Do development/second teams have better or worst spirit overall? 
+I suspect for this one, they will be ranked lower because of rules and knowledge. That gives me a bit of a headache, because part of our job is to teach beginners the rules, and I'm not fussed if that happens at tournaments. To me, a well-spirited game with a beginner could go something like this:
+*Pick Call*
+Beginner: "What does that mean?"
+Experienced Player: "It means your defender was stopped from defending you because they were close to you and you ran through people. Play stops and they get to catch up. Everybody goes back to where they were before the pick was called."
+Beginner: "Oh, ok."
+Doesn't seem like others feel that way though... 
+
+4. On that note, who gets called out for contact most: Open, Women's, or Mixed? 
+
+2. What part of the UK has the best/worst spirit (hehehe)? 
+The weird thing about this is... it's self-reported. 
+
