@@ -33,7 +33,46 @@ First we load in the data that I comglomerated because R doesn't know how to rea
 ```{r}
 spirit_path = "spirit.csv"
 dl <- drive_download(as_id("1wmn1K04N4dRuk4HPezT0fHFl0q1pEeSUsjgm2hfpXPc"), path=spirit_path, overwrite=TRUE)
-raw <- read.csv(spirit_path)
+# read in and add total for ease
+raw <- read.csv(spirit_path) %>%
+  mutate(total = Rules + Fouls + Fairness + Attitude + Comms) %>%
+  mutate(original_index=as.numeric(rownames(raw))) %>%
+  na.omit()
+
+# I feel like the above shouldn't work and I should have to do the below
+# raw <- mutate(raw, original_index=as.numeric(rownames(raw)))
+
+
+## just get all these set up for later.
+women <- raw %>%
+  filter(League == "Women") %>%
+  na.omit()
+
+men <- raw %>%
+  filter(League == "Men") %>%
+  na.omit()
+
+mixed <- raw %>%
+  filter(League == "Mixed") %>%
+  na.omit()
+
+div.i <- raw %>%
+  filter(Level == "Nats Div I")
+
+div.ii <- raw %>%
+  filter(Level == "Nats Div II")
+
+regionals <- raw %>%
+  filter(Level == "Regionals")
+
+indoor <- raw %>%
+  filter(Indoor.Outdoor == "Indoor")
+
+outdoor <- raw %>%
+  filter(Indoor.Outdoor == "Outdoor")
+
+repeats <- raw %>%
+  filter(Repeat == "Repeat Game")
 ```
 
 Now let's just start asking questions because data science is dope AF. 
@@ -43,8 +82,107 @@ Now let's just start asking questions because data science is dope AF.
 2. Which teams have beef with each other? 
 
 3. How do repeat games stack up against one another?
+```{r}
+# because of the alphabet I was very cheeky in how I discerned "repeat" and "first" games
+repeat_indexes <- repeats$original_index
+first_game_indexes <- repeat_indexes - 1
+
+first_games <- raw %>%
+  filter(original_index %in% first_game_indexes)
+
+#stats
+first_game_avg <- first_games$total
+repeat_game_avg <- repeats$total
+
+# first game stats:
+mean(first_game_avg)
+sd(first_game_avg)
+
+# repeat game stats:
+mean(repeat_game_avg)
+sd(repeat_game_avg)
+```
+Almost no difference
+
+
+Plot them now
+```{r}
+p <- ggplot(data=df2, aes(x=dose, y=len, fill=Repeat)) +
+geom_bar(stat="identity", color="black", position=position_dodge())+
+  theme_minimal()
+# Use custom colors
+p + scale_fill_manual(values=c('#999999','#E69F00'))
+# Use brewer color palettes
+p + scale_fill_brewer(palette="Blues")
+
+## there are many more clever says to do this, I am just in a pinch for time
+w_att <- mean(women$Attitude)
+m_att <- mean(men$Attitude)
+x_att <- mean(mixed$Attitude)
+
+df <- data.frame("score"=c(w_att, m_att, x_att), "league"=c("women", "men", "mixed"), "category"=rep("attitude", 3))
+
+
+plotable_data <- raw %>% 
+  gather("category", "score", 5:9) 
+
+p <- ggplot(plotable_data) + 
+  geom_bar(aes(x=category, y=score, fill=League), stat="identity", alpha=0.7) + 
+  geom_errorbar(aes(x=category, ymin=score-sd, ymax=score+sd), width=0.4, alpha=0.9)
+  
+p <- ggplot(data=df, aes(x=category, y=score, fill=league)) + 
+  geom_bar(stat="identity", color="black", position=position_dodge())
+
+p
+
+
+summarise_attr <- function(groupby, attr) {
+  d <- raw %>%
+    na.omit() %>%
+    group_by(League) %>%
+    summarise(mean_attr=mean(attr),
+              sd_attr=sd(attr),
+              n_gr=n(),
+              se_attr=sd(attr)/sqrt(n()))
+  return (d)
+}
+
+d<-summarise_attr("League", "Rules")
+
+t <- raw %>%
+  na.omit() %>%
+  group_by(League)
+
+rules_summary <- raw %>%
+  na.omit() %>%
+  group_by(League) %>%
+  summarise(mean_rules=mean(Rules),
+            sd_rules=sd(Rules),
+            n_Gr=n(),
+            SE_rules=sd(Rules)/sqrt(n()))
+
+attitude_summary <- raw %>%
+  na.omit() %>%
+  group_by(League) %>%
+  summarise(mean_attitude=mean(Attitude),
+            sd_attitude=sd(Attitude),
+            n_Gr=n(),
+            SE_attitude=sd(Attitude)/sqrt(n()))
+
+
+p <- ggplot(rules_summary, aes(League, mean_rules, fill=League)) + 
+  geom_col() +
+  geom_errorbar(aes(ymin=mean_rules-sd_rules, ymax=mean_rules+sd_rules), width=0.2)
+
+# group (supp)    score  (len)    spirit_cat (dose)
+# m                 z                 rules
+# w                 z                 rules
+# x                 z                 rules
+
+```
 
 4. Who comments most: Men, Women, or Mixed?
+
 
 3. Do development/second teams have better or worst spirit overall? 
 I suspect for this one, they will be ranked lower because of rules and knowledge. That gives me a bit of a headache, because part of our job is to teach beginners the rules, and I'm not fussed if that happens at tournaments. To me, a well-spirited game with a beginner could go something like this:
@@ -53,6 +191,68 @@ Beginner: "What does that mean?"
 Experienced Player: "It means your defender was stopped from defending you because they were close to you and you ran through people. Play stops and they get to catch up. Everybody goes back to where they were before the pick was called."
 Beginner: "Oh, ok."
 Doesn't seem like others feel that way though... 
+```{r}
+# for this use case, I only used teams 3 and 4 in my definition of "development" as many unis are big enough
+# to easily field 2 "first" indoor teams.
+dev_teams <- raw %>% 
+  filter(grepl(4,Opponent) | grepl(3,Opponent))
+
+experienced_teams <- raw %>%
+  filter(grepl(1,Opponent))
+
+compare_two_spirit_groups <- function(group1, group2, domain) {
+  g1_domain <- group1[[domain]]
+  g2_domain <- group2[[domain]]
+  print(mean(g1_domain))
+  print(mean(g2_domain))
+  t.test(g1_domain, g2_domain)
+}
+```
+
+Now actually compare them all
+```{r}
+compare_two_spirit_groups(dev_teams, experienced_teams, "Rules")
+compare_two_spirit_groups(dev_teams, experienced_teams, "Fouls")
+compare_two_spirit_groups(dev_teams, experienced_teams, "Fairness")
+compare_two_spirit_groups(dev_teams, experienced_teams, "Attitude")
+compare_two_spirit_groups(dev_teams, experienced_teams, "Comms")
+```
+So rules-wise, beginners teams have a harder time. Maybe we should go a little easier on them, or at least recognize it's our responsibility to teach them the rules. 
+Everybody is equally fouly, lol.
+Everybody is equally spirited when it comes to fairness.
+Everybody seems to have a pretty high attitude.
+And also everybody seems to be able to communicate pretty well.
+
+Now let's see for men and women's
+```{r}
+compare_two_spirit_groups(men, women, "Rules")
+compare_two_spirit_groups(men, women, "Fouls")
+compare_two_spirit_groups(men, women, "Fairness")
+compare_two_spirit_groups(men, women, "Attitude")
+compare_two_spirit_groups(men, women, "Comms")
+```
+Everybody is equally bad at rules. 
+Equally fouly
+Equally fair
+Equally good attitudes
+But women rate each other lower on communication! zoinks
+
+What about both of these but vs. mixed?
+```{r}
+compare_two_spirit_groups(men, mixed, "Rules")
+compare_two_spirit_groups(men, mixed, "Fouls")
+compare_two_spirit_groups(men, mixed, "Fairness")
+compare_two_spirit_groups(men, mixed, "Attitude")
+compare_two_spirit_groups(men, mixed, "Comms")
+
+
+compare_two_spirit_groups(women, mixed, "Rules")
+compare_two_spirit_groups(women, mixed, "Fouls")
+compare_two_spirit_groups(women, mixed, "Fairness")
+compare_two_spirit_groups(women, mixed, "Attitude")
+compare_two_spirit_groups(women, mixed, "Comms")
+```
+The takeaway here is mixed gets round-the-board better spirit scores for everything. Playing mixed gender seems to make people happy.
 
 4. On that note, who gets called out for contact most: Open, Women's, or Mixed? 
 
