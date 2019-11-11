@@ -48,13 +48,28 @@ women <- raw %>%
   filter(League == "Women") %>%
   na.omit()
 
-men <- raw %>%
-  filter(League == "Men") %>%
+# for some reason our men are showing up as two factors
+m1 = unique(raw$League)[3]
+m2 = unique(raw$League)[4]
+men2 <- raw %>%
+  filter(League == m2) %>%
   na.omit()
+
+men2$League = "Men"
+
+men1 <- raw %>%
+  filter(League == m1) %>%
+  na.omit()
+
+men1$League = "Men"
+
+men <- rbind(men1, men2)
 
 mixed <- raw %>%
   filter(League == "Mixed") %>%
   na.omit()
+
+raw <- rbind(men, women, mixed)
 
 div.i <- raw %>%
   filter(Level == "Nats Div I")
@@ -101,87 +116,42 @@ sd(first_game_avg)
 # repeat game stats:
 mean(repeat_game_avg)
 sd(repeat_game_avg)
+
 ```
-Almost no difference
+Answer: Almost no difference
 
 
 Plot them now
 ```{r}
-p <- ggplot(data=df2, aes(x=dose, y=len, fill=Repeat)) +
-geom_bar(stat="identity", color="black", position=position_dodge())+
-  theme_minimal()
-# Use custom colors
-p + scale_fill_manual(values=c('#999999','#E69F00'))
-# Use brewer color palettes
-p + scale_fill_brewer(palette="Blues")
-
-## there are many more clever says to do this, I am just in a pinch for time
-w_att <- mean(women$Attitude)
-m_att <- mean(men$Attitude)
-x_att <- mean(mixed$Attitude)
-
-df <- data.frame("score"=c(w_att, m_att, x_att), "league"=c("women", "men", "mixed"), "category"=rep("attitude", 3))
-
-
-plotable_data <- raw %>% 
-  gather("category", "score", 5:9) 
-
-p <- ggplot(plotable_data) + 
-  geom_bar(aes(x=category, y=score, fill=League), stat="identity", alpha=0.7) + 
-  geom_errorbar(aes(x=category, ymin=score-sd, ymax=score+sd), width=0.4, alpha=0.9)
-  
-p <- ggplot(data=df, aes(x=category, y=score, fill=league)) + 
-  geom_bar(stat="identity", color="black", position=position_dodge())
-
-p
-
-
-summarise_attr <- function(groupby, attr) {
-  d <- raw %>%
-    na.omit() %>%
-    group_by(League) %>%
-    summarise(mean_attr=mean(attr),
-              sd_attr=sd(attr),
-              n_gr=n(),
-              se_attr=sd(attr)/sqrt(n()))
-  return (d)
-}
-
-d<-summarise_attr("League", "Rules")
-
-t <- raw %>%
-  na.omit() %>%
-  group_by(League)
-
-rules_summary <- raw %>%
+overall_summary <- raw %>%
   na.omit() %>%
   group_by(League) %>%
   summarise(mean_rules=mean(Rules),
             sd_rules=sd(Rules),
             n_Gr=n(),
-            SE_rules=sd(Rules)/sqrt(n()))
+            SE_rules=sd(Rules)/sqrt(n()),
+            mean_att=mean(Attitude),
+            sd_att=sd(Attitude),
+            SE_att=sd(Attitude)/sqrt(n()),
+            mean_fouls=mean(Fouls),
+            sd_fouls=sd(Fouls),
+            SE_fouls=sd(Fouls)/sqrt(n()),
+            mean_fair=mean(Fairness),
+            sd_fair=sd(Fairness),
+            SE_fair=sd(Fairness)/sqrt(n()),
+            mean_comm=mean(Comms),
+            sd_comm=sd(Comms),
+            SE_comm=sd(Comms)/sqrt(n()))
 
-attitude_summary <- raw %>%
-  na.omit() %>%
-  group_by(League) %>%
-  summarise(mean_attitude=mean(Attitude),
-            sd_attitude=sd(Attitude),
-            n_Gr=n(),
-            SE_attitude=sd(Attitude)/sqrt(n()))
+plotable <- overall_summary %>%
+  gather("category", "mean_vals", c(2,6,9,12,15))
 
 
-p <- ggplot(rules_summary, aes(League, mean_rules, fill=League)) + 
-  geom_col() +
-  geom_errorbar(aes(ymin=mean_rules-sd_rules, ymax=mean_rules+sd_rules), width=0.2)
+p <- ggplot(plotable, aes(x=category, mean_vals, fill=League)) + 
+  geom_col(position=position_dodge())
 
-# group (supp)    score  (len)    spirit_cat (dose)
-# m                 z                 rules
-# w                 z                 rules
-# x                 z                 rules
-
+p
 ```
-
-4. Who comments most: Men, Women, or Mixed?
 
 
 3. Do development/second teams have better or worst spirit overall? 
@@ -225,11 +195,11 @@ And also everybody seems to be able to communicate pretty well.
 
 Now let's see for men and women's
 ```{r}
-compare_two_spirit_groups(men, women, "Rules")
-compare_two_spirit_groups(men, women, "Fouls")
-compare_two_spirit_groups(men, women, "Fairness")
-compare_two_spirit_groups(men, women, "Attitude")
-compare_two_spirit_groups(men, women, "Comms")
+p_rules <- compare_two_spirit_groups(men, women, "Rules")[[3]]
+p_fouls <- compare_two_spirit_groups(men, women, "Fouls")[[3]]
+p_fairness <- compare_two_spirit_groups(men, women, "Fairness")[[3]]
+p_attitude <- compare_two_spirit_groups(men, women, "Attitude")[[3]]
+p_communcation <- compare_two_spirit_groups(men, women, "Comms")[[3]]
 ```
 Everybody is equally bad at rules. 
 Equally fouly
@@ -253,6 +223,82 @@ compare_two_spirit_groups(women, mixed, "Attitude")
 compare_two_spirit_groups(women, mixed, "Comms")
 ```
 The takeaway here is mixed gets round-the-board better spirit scores for everything. Playing mixed gender seems to make people happy.
+
+The vis we actually care about
+```{r}
+dev_teams <- raw %>% 
+  filter((grepl(4,Opponent) | grepl(3,Opponent)) & !(grepl(1, Opponent) | grepl(2, Opponent)))
+dev_teams$experience = "dev"
+
+experienced_teams <- raw %>%
+  filter(grepl(1,Opponent))
+experienced_teams$experience = "exp"
+
+
+exp_dev <- rbind(dev_teams, experienced_teams) %>%
+  na.omit() %>%
+  group_by(experience) %>%
+  summarise(rules=mean(Rules),
+          sd_rules=sd(Rules),
+          n_Gr=n(),
+          SE_rules=sd(Rules)/sqrt(n()),
+          attitude=mean(Attitude),
+          sd_att=sd(Attitude),
+          SE_att=sd(Attitude)/sqrt(n()),
+          fouls=mean(Fouls),
+          sd_fouls=sd(Fouls),
+          SE_fouls=sd(Fouls)/sqrt(n()),
+          fairness=mean(Fairness),
+          sd_fair=sd(Fairness),
+          SE_fair=sd(Fairness)/sqrt(n()),
+          communication=mean(Comms),
+          sd_comm=sd(Comms),
+          SE_comm=sd(Comms)/sqrt(n()))
+
+plotable_exp_dev <- exp_dev %>%
+  gather("spirit_category", "mean_scores", c(2,6,9,12,15))
+
+
+
+exp_dev_p <- ggplot(plotable_exp_dev, aes(x=spirit_category, mean_scores, fill=experience)) + 
+  geom_col(position=position_dodge())
+
+exp_dev_p 
+
+drops <- c("n_Gr", "SE_rules", "sd_rules", "SE_att", "sd_att", "sd_fouls", "SE_fouls", "sd_fair", "SE_fair", "sd_comm", "SE_comm")
+
+exp_dev_table <- exp_dev[ , !(names(exp_dev) %in% drops)] 
+  
+
+overall_summary <- raw %>%
+  na.omit() %>%
+  group_by(League) %>%
+  summarise(rules=mean(Rules),
+            sd_rules=sd(Rules),
+            n_Gr=n(),
+            SE_rules=sd(Rules)/sqrt(n()),
+            attitude=mean(Attitude),
+            sd_att=sd(Attitude),
+            SE_att=sd(Attitude)/sqrt(n()),
+            fouls=mean(Fouls),
+            sd_fouls=sd(Fouls),
+            SE_fouls=sd(Fouls)/sqrt(n()),
+            fairness=mean(Fairness),
+            sd_fair=sd(Fairness),
+            SE_fair=sd(Fairness)/sqrt(n()),
+            communication=mean(Comms),
+            sd_comm=sd(Comms),
+            SE_comm=sd(Comms)/sqrt(n()))
+
+mw_plotable <- overall_summary %>%
+  gather("spirit_category", "mean_scores", c(2,6,9,12,15))
+
+
+mw_p <- ggplot(mw_plotable, aes(x=spirit_category, mean_scores, fill=League)) + 
+  geom_col(position=position_dodge())
+
+mw_p
+```
 
 4. On that note, who gets called out for contact most: Open, Women's, or Mixed? 
 
