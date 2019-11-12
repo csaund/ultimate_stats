@@ -36,8 +36,10 @@ dl <- drive_download(as_id("1wmn1K04N4dRuk4HPezT0fHFl0q1pEeSUsjgm2hfpXPc"), path
 # read in and add total for ease
 raw <- read.csv(spirit_path) %>%
   mutate(total = Rules + Fouls + Fairness + Attitude + Comms) %>%
-  mutate(original_index=as.numeric(rownames(raw))) %>%
   na.omit()
+
+raw <- raw %>%
+  mutate(original_index=as.numeric(rownames(raw)))
 
 # I feel like the above shouldn't work and I should have to do the below
 # raw <- mutate(raw, original_index=as.numeric(rownames(raw)))
@@ -298,6 +300,45 @@ mw_p <- ggplot(mw_plotable, aes(x=spirit_category, mean_scores, fill=League)) +
   geom_col(position=position_dodge())
 
 mw_p
+
+
+lvl_summary <- raw %>%
+  na.omit() %>%
+  filter(grepl(1,Opponent) & !(grepl(3, Opponent) | grepl(4, Opponent))) %>%
+  filter(grepl("Regionals",Level)) %>%
+  filter(grepl(1,Team) & !(grepl(3, Team) | grepl(4, Team))) 
+
+
+lvl_summary <- raw %>%
+  na.omit() %>%
+  filter(grepl(1,Opponent) & !(grepl(3, Opponent) | grepl(4, Opponent))) %>%   # optional, remove dev teams from regionals
+  filter(grepl(1,Team) & !(grepl(3, Team) | grepl(4, Team))) %>% # optional, only search first teams rating first teams
+  group_by(Level) %>%
+  summarise(rules=mean(Rules),
+            sd_rules=sd(Rules),
+            n_Gr=n(),
+            SE_rules=sd(Rules)/sqrt(n()),
+            attitude=mean(Attitude),
+            sd_att=sd(Attitude),
+            SE_att=sd(Attitude)/sqrt(n()),
+            fouls=mean(Fouls),
+            sd_fouls=sd(Fouls),
+            SE_fouls=sd(Fouls)/sqrt(n()),
+            fairness=mean(Fairness),
+            sd_fair=sd(Fairness),
+            SE_fair=sd(Fairness)/sqrt(n()),
+            communication=mean(Comms),
+            sd_comm=sd(Comms),
+            SE_comm=sd(Comms)/sqrt(n()))
+
+lvl_plotable <- lvl_summary %>%
+  gather("spirit_category", "mean_scores", c(2,6,9,12,15))
+
+
+lvl_p <- ggplot(lvl_plotable, aes(x=spirit_category, mean_scores, fill=Level)) + 
+  geom_col(position=position_dodge())
+
+lvl_p
 ```
 
 4. On that note, who gets called out for contact most: Open, Women's, or Mixed? 
@@ -305,3 +346,6 @@ mw_p
 2. What part of the UK has the best/worst spirit (hehehe)? 
 The weird thing about this is... it's self-reported. 
 
+
+
+TODO: normalize scores across teams (i.e. normalize scores for teams that are more generous than others)
